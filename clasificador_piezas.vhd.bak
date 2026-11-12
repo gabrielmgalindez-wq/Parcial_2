@@ -1,0 +1,2092 @@
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+package componentes_pkg is
+
+    component divisor_reloj is
+        generic (TICK_MAX : integer := 6249999);
+        port (
+            clk  : in  std_logic;
+            tick : out std_logic
+        );
+    end component;
+
+    component control_banda is
+        port (
+            clk        : in  std_logic;
+            rst        : in  std_logic;
+            tick       : in  std_logic;
+            run        : in  std_logic;
+            jam        : in  std_logic;
+            speed      : in  std_logic_vector(1 downto 0);
+            belt_pulse : out std_logic
+        );
+    end component;
+
+    component detector_flanco is
+        port (
+            clk    : in  std_logic;
+            rst    : in  std_logic;
+            tick   : in  std_logic;
+            senal  : in  std_logic;
+            flanco : out std_logic
+        );
+    end component;
+
+    component decodificador_sensores is
+        port (
+            sw_color   : in  std_logic_vector(2 downto 0);
+            sw_tam     : in  std_logic;
+            color_code : out std_logic_vector(1 downto 0);
+            size_code  : out std_logic
+        );
+    end component;
+
+    component registro is
+        generic (
+            WIDTH   : integer := 8;
+            RST_VAL : std_logic_vector(15 downto 0) := (others => '0')
+        );
+        port (
+            clk : in  std_logic;
+            rst : in  std_logic;
+            en  : in  std_logic;
+            d   : in  std_logic_vector(WIDTH-1 downto 0);
+            q   : out std_logic_vector(WIDTH-1 downto 0)
+        );
+    end component;
+
+    component fsm_control is
+        port (
+            clk         : in  std_logic;
+            rst         : in  std_logic;
+            run         : in  std_logic;
+            jam         : in  std_logic;
+            presencia   : in  std_logic;
+            modo_real   : in  std_logic;
+            color_listo : in  std_logic;
+            color_valid : in  std_logic;
+            cap_en      : out std_logic;
+            upd_ultima  : out std_logic;
+            inc_ok      : out std_logic;
+            inc_rej     : out std_logic;
+            we_ram      : out std_logic;
+            save_ptr    : out std_logic
+        );
+    end component;
+
+    component rom_rutas is
+        port (
+            addr : in  std_logic_vector(2 downto 0);
+            dato : out std_logic_vector(2 downto 0)
+        );
+    end component;
+
+    component contador_sat is
+        generic (MAXVAL : integer := 99);
+        port (
+            clk : in  std_logic;
+            rst : in  std_logic;
+            en  : in  std_logic;
+            q   : out unsigned(6 downto 0)
+        );
+    end component;
+
+    component puntero_historial is
+        port (
+            clk  : in  std_logic;
+            rst  : in  std_logic;
+            save : in  std_logic;
+            nav  : in  std_logic;
+            head : out unsigned(2 downto 0);
+            used : out unsigned(3 downto 0);
+            view : out unsigned(2 downto 0)
+        );
+    end component;
+
+    component ram_historial is
+        generic (
+            ADDR_W : integer := 3;
+            DATA_W : integer := 10
+        );
+        port (
+            clk     : in  std_logic;
+            we      : in  std_logic;
+            wr_addr : in  unsigned(ADDR_W-1 downto 0);
+            din     : in  std_logic_vector(DATA_W-1 downto 0);
+            rd_addr : in  unsigned(ADDR_W-1 downto 0);
+            dout    : out std_logic_vector(DATA_W-1 downto 0)
+        );
+    end component;
+
+    component selector_display is
+        port (
+            modo_hist : in  std_logic;
+            color_act : in  std_logic_vector(1 downto 0);
+            size_act  : in  std_logic_vector(1 downto 0);
+            count_act : in  unsigned(6 downto 0);
+            color_h   : in  std_logic_vector(1 downto 0);
+            size_h    : in  std_logic;
+            count_h   : in  unsigned(6 downto 0);
+            addr_hex3 : out std_logic_vector(4 downto 0);
+            addr_hex2 : out std_logic_vector(4 downto 0);
+            addr_hex1 : out std_logic_vector(4 downto 0);
+            addr_hex0 : out std_logic_vector(4 downto 0)
+        );
+    end component;
+
+    component rom_seg7 is
+        port (
+            addr : in  std_logic_vector(4 downto 0);
+            seg  : out std_logic_vector(6 downto 0)
+        );
+    end component;
+
+    component decodificador_leds is
+        port (
+            ruta       : in  std_logic_vector(2 downto 0);
+            tam        : in  std_logic_vector(1 downto 0);
+            belt_pulse : in  std_logic;
+            run        : in  std_logic;
+            jam        : in  std_logic;
+            presencia  : in  std_logic;
+            leds       : out std_logic_vector(9 downto 0)
+        );
+    end component;
+
+    ------------------------------------------------------------------
+    -- COMPONENTES PARA EL MONTAJE REAL
+    ------------------------------------------------------------------
+
+    component sync_entrada is
+        generic (ACTIVO_BAJO : boolean := false);
+        port (
+            clk     : in  std_logic;
+            entrada : in  std_logic;
+            salida  : out std_logic
+        );
+    end component;
+
+    component biestable_toggle is
+        port (
+            clk : in  std_logic;
+            rst : in  std_logic;
+            t   : in  std_logic;
+            q   : out std_logic
+        );
+    end component;
+
+    component selector_entradas is
+        port (
+            modo_real : in  std_logic;
+            sw_pres   : in  std_logic;
+            ir_pres   : in  std_logic;
+            sw_color  : in  std_logic_vector(2 downto 0);
+            tcs_color : in  std_logic_vector(2 downto 0);
+            sw_tam    : in  std_logic;
+            ir_tam    : in  std_logic;
+            presencia : out std_logic;
+            color_oh  : out std_logic_vector(2 downto 0);
+            tam       : out std_logic
+        );
+    end component;
+
+    component medidor_color is
+        generic (
+            SETTLE_CYC : integer := 100000;
+            WINDOW_CYC : integer := 250000;
+            MIN_COUNT  : integer := 20
+        );
+        port (
+            clk      : in  std_logic;
+            rst      : in  std_logic;
+            tcs_out  : in  std_logic;
+            tcs_s    : out std_logic_vector(3 downto 0);
+            color_oh : out std_logic_vector(2 downto 0);
+            listo    : out std_logic
+        );
+    end component;
+
+    component rom_servos is
+        port (
+            ruta : in  std_logic_vector(2 downto 0);
+            pos1 : out std_logic_vector(1 downto 0);
+            pos2 : out std_logic_vector(1 downto 0)
+        );
+    end component;
+
+    component pwm_servo is
+        generic (
+            PERIODO_CYC : integer := 1000000;
+            POS0_CYC    : integer := 50000;
+            POS1_CYC    : integer := 75000;
+            POS2_CYC    : integer := 100000
+        );
+        port (
+            clk : in  std_logic;
+            rst : in  std_logic;
+            pos : in  std_logic_vector(1 downto 0);
+            pwm : out std_logic
+        );
+    end component;
+
+    component control_motor is
+        generic (PERIODO_CYC : integer := 10000);
+        port (
+            clk   : in  std_logic;
+            rst   : in  std_logic;
+            run   : in  std_logic;
+            jam   : in  std_logic;
+            speed : in  std_logic_vector(1 downto 0);
+            ena   : out std_logic;
+            in1   : out std_logic;
+            in2   : out std_logic
+        );
+    end component;
+
+    component control_paso is
+        generic (
+            PASOS    : integer := 683;
+            PASO_CYC : integer := 100000
+        );
+        port (
+            clk     : in  std_logic;
+            rst     : in  std_logic;
+            en      : in  std_logic;
+            go      : in  std_logic;
+            busy    : out std_logic;
+            bobinas : out std_logic_vector(3 downto 0)
+        );
+    end component;
+
+end package componentes_pkg;
+
+
+
+----------------------------------------------------------------------
+-- DIVISOR DE RELOJ
+-- 50 MHz / 6250000 = 8 Hz  (un pulso de 1 ciclo cada 125 ms)
+----------------------------------------------------------------------
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity divisor_reloj is
+    generic (TICK_MAX : integer := 6249999);
+    port (
+        clk  : in  std_logic;
+        tick : out std_logic
+    );
+end entity divisor_reloj;
+
+architecture rtl of divisor_reloj is
+    signal cnt : integer range 0 to TICK_MAX := 0;
+begin
+
+    process(clk)
+    begin
+        if rising_edge(clk) then
+            if cnt = TICK_MAX then
+                cnt  <= 0;
+                tick <= '1';
+            else
+                cnt  <= cnt + 1;
+                tick <= '0';
+            end if;
+        end if;
+    end process;
+
+end architecture rtl;
+
+
+
+----------------------------------------------------------------------
+-- CONTROL DE LA BANDA
+--
+-- speed:  00 = 1 Hz   01 = 2 Hz   10 = 4 Hz   11 = 8 Hz
+-- run = SW0 (banda encendida)    jam = SW8 (atasco)
+----------------------------------------------------------------------
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity control_banda is
+    port (
+        clk        : in  std_logic;
+        rst        : in  std_logic;
+        tick       : in  std_logic;
+        run        : in  std_logic;
+        jam        : in  std_logic;
+        speed      : in  std_logic_vector(1 downto 0);
+        belt_pulse : out std_logic
+    );
+end entity control_banda;
+
+architecture rtl of control_banda is
+    signal phase : integer range 0 to 7 := 0;
+    signal pulse : std_logic := '0';
+begin
+
+    process(clk)
+        variable speed_div : integer range 1 to 8;
+    begin
+        if rising_edge(clk) then
+
+            if rst = '1' then
+                phase <= 0;
+                pulse <= '0';
+
+            elsif tick = '1' then
+
+                case speed is
+                    when "00"   => speed_div := 8;
+                    when "01"   => speed_div := 4;
+                    when "10"   => speed_div := 2;
+                    when others => speed_div := 1;
+                end case;
+
+                if run = '1' and jam = '0' then
+                    if phase >= speed_div - 1 then
+                        phase <= 0;
+                        pulse <= not pulse;
+                    else
+                        phase <= phase + 1;
+                    end if;
+                else
+                    phase <= 0;
+                    pulse <= '0';
+                end if;
+
+            end if;
+        end if;
+    end process;
+
+    belt_pulse <= pulse;
+
+end architecture rtl;
+
+
+
+----------------------------------------------------------------------
+-- DETECTOR DE FLANCO 0 -> 1
+-- Muestrea solo en cada tick (igual que el diseno original).
+-- flanco = pulso combinacional de 1 ciclo cuando senal pasa de 0 a 1.
+----------------------------------------------------------------------
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity detector_flanco is
+    port (
+        clk    : in  std_logic;
+        rst    : in  std_logic;
+        tick   : in  std_logic;
+        senal  : in  std_logic;
+        flanco : out std_logic
+    );
+end entity detector_flanco;
+
+architecture rtl of detector_flanco is
+    signal prev : std_logic := '0';
+begin
+
+    process(clk)
+    begin
+        if rising_edge(clk) then
+            if rst = '1' then
+                prev <= '0';
+            elsif tick = '1' then
+                prev <= senal;
+            end if;
+        end if;
+    end process;
+
+    flanco <= tick and senal and (not prev) and (not rst);
+
+end architecture rtl;
+
+
+
+----------------------------------------------------------------------
+-- DECODIFICADOR DE SENSORES
+--
+-- sw_color = SW6 & SW5 & SW4   (azul, verde, rojo)
+--
+-- color_code: 00 = ROJO   01 = VERDE   10 = AZUL   11 = ERROR
+-- size_code : 0 = PEQUENA   1 = GRANDE
+----------------------------------------------------------------------
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity decodificador_sensores is
+    port (
+        sw_color   : in  std_logic_vector(2 downto 0);
+        sw_tam     : in  std_logic;
+        color_code : out std_logic_vector(1 downto 0);
+        size_code  : out std_logic
+    );
+end entity decodificador_sensores;
+
+architecture rtl of decodificador_sensores is
+begin
+
+    with sw_color select
+        color_code <= "00" when "001",   -- SW4 = rojo
+                      "01" when "010",   -- SW5 = verde
+                      "10" when "100",   -- SW6 = azul
+                      "11" when others;  -- ninguno o mas de uno
+
+    size_code <= sw_tam;
+
+end architecture rtl;
+
+
+
+----------------------------------------------------------------------
+-- REGISTRO GENERICO CON RESET SINCRONO Y HABILITACION
+----------------------------------------------------------------------
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity registro is
+    generic (
+        WIDTH   : integer := 8;
+        RST_VAL : std_logic_vector(15 downto 0) := (others => '0')
+    );
+    port (
+        clk : in  std_logic;
+        rst : in  std_logic;
+        en  : in  std_logic;
+        d   : in  std_logic_vector(WIDTH-1 downto 0);
+        q   : out std_logic_vector(WIDTH-1 downto 0)
+    );
+end entity registro;
+
+architecture rtl of registro is
+    signal r : std_logic_vector(WIDTH-1 downto 0) := RST_VAL(WIDTH-1 downto 0);
+begin
+
+    process(clk)
+    begin
+        if rising_edge(clk) then
+            if rst = '1' then
+                r <= RST_VAL(WIDTH-1 downto 0);
+            elsif en = '1' then
+                r <= d;
+            end if;
+        end if;
+    end process;
+
+    q <= r;
+
+end architecture rtl;
+
+
+
+----------------------------------------------------------------------
+-- MAQUINA DE ESTADOS
+--
+--   E_DETENIDA  : banda apagada (SW0 = 0)
+--   E_ATASCO    : atasco (SW8 = 1)
+--   E_ESPERA    : banda en marcha, esperando una pieza
+--   E_MIDE      : (solo modo REAL) espera dos ciclos completos del
+--                 medidor de color para tener una lectura fresca
+--   E_CAPTURA   : guarda color y tamano
+--   E_CLASIFICA : consulta la ROM, actualiza ultima pieza y contadores
+--   E_GUARDA    : escribe la pieza en la RAM y avanza el puntero
+--
+-- En modo MANUAL el estado E_MIDE se omite y el funcionamiento es el
+-- mismo que en el diseno original.
+----------------------------------------------------------------------
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity fsm_control is
+    port (
+        clk         : in  std_logic;
+        rst         : in  std_logic;
+        run         : in  std_logic;
+        jam         : in  std_logic;
+        presencia   : in  std_logic;   -- flanco 0->1 del sensor
+        modo_real   : in  std_logic;   -- '1' = sensores reales
+        color_listo : in  std_logic;   -- fin de un ciclo de medicion
+        color_valid : in  std_logic;   -- color capturado valido
+        cap_en      : out std_logic;
+        upd_ultima  : out std_logic;
+        inc_ok      : out std_logic;
+        inc_rej     : out std_logic;
+        we_ram      : out std_logic;
+        save_ptr    : out std_logic
+    );
+end entity fsm_control;
+
+architecture rtl of fsm_control is
+
+    type estado_t is (E_DETENIDA, E_ATASCO, E_ESPERA, E_MIDE,
+                      E_CAPTURA, E_CLASIFICA, E_GUARDA);
+
+    signal estado    : estado_t := E_DETENIDA;
+    signal siguiente : estado_t;
+    signal base      : estado_t;
+
+    signal n_listo   : integer range 0 to 2 := 0;
+
+begin
+
+    -- Estado "de reposo" segun los switches
+    base <= E_ATASCO   when jam = '1' else
+            E_ESPERA   when run = '1' else
+            E_DETENIDA;
+
+
+    -- Registro de estado
+    process(clk)
+    begin
+        if rising_edge(clk) then
+            if rst = '1' then
+                estado <= E_DETENIDA;
+            else
+                estado <= siguiente;
+            end if;
+        end if;
+    end process;
+
+
+    -- Cuenta de ciclos completos del medidor de color
+    process(clk)
+    begin
+        if rising_edge(clk) then
+            if estado /= E_MIDE then
+                n_listo <= 0;
+            elsif color_listo = '1' and n_listo < 2 then
+                n_listo <= n_listo + 1;
+            end if;
+        end if;
+    end process;
+
+
+    -- Logica de siguiente estado
+    process(estado, base, presencia, modo_real, n_listo)
+    begin
+        siguiente <= base;
+
+        case estado is
+
+            when E_ESPERA =>
+                if presencia = '1' and base = E_ESPERA then
+                    if modo_real = '1' then
+                        siguiente <= E_MIDE;
+                    else
+                        siguiente <= E_CAPTURA;
+                    end if;
+                end if;
+
+            when E_MIDE =>
+                if base = E_ATASCO then
+                    siguiente <= E_ATASCO;
+                elsif n_listo = 2 then
+                    siguiente <= E_CAPTURA;
+                else
+                    siguiente <= E_MIDE;
+                end if;
+
+            when E_CAPTURA =>
+                siguiente <= E_CLASIFICA;
+
+            when E_CLASIFICA =>
+                siguiente <= E_GUARDA;
+
+            when others =>          -- DETENIDA, ATASCO, GUARDA
+                siguiente <= base;
+
+        end case;
+    end process;
+
+
+    -- Salidas (tipo Moore)
+    process(estado, color_valid)
+    begin
+        cap_en     <= '0';
+        upd_ultima <= '0';
+        inc_ok     <= '0';
+        inc_rej    <= '0';
+        we_ram     <= '0';
+        save_ptr   <= '0';
+
+        case estado is
+
+            when E_CAPTURA =>
+                cap_en <= '1';
+
+            when E_CLASIFICA =>
+                upd_ultima <= '1';
+                if color_valid = '1' then
+                    inc_ok  <= '1';
+                else
+                    inc_rej <= '1';
+                end if;
+
+            when E_GUARDA =>
+                we_ram   <= '1';
+                save_ptr <= '1';
+
+            when others =>
+                null;
+
+        end case;
+    end process;
+
+end architecture rtl;
+
+
+
+----------------------------------------------------------------------
+-- ROM DE RUTAS
+--
+-- Direccion = color (2 bits) & tamano (1 bit)
+--
+-- Ruta: 0 = ROJO PEQ   1 = ROJO GRANDE
+--       2 = VERDE PEQ  3 = VERDE GRANDE
+--       4 = AZUL PEQ   5 = AZUL GRANDE
+--       6 = RECHAZO
+----------------------------------------------------------------------
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity rom_rutas is
+    port (
+        addr : in  std_logic_vector(2 downto 0);
+        dato : out std_logic_vector(2 downto 0)
+    );
+end entity rom_rutas;
+
+architecture rtl of rom_rutas is
+
+    type rom_t is array (0 to 7) of std_logic_vector(2 downto 0);
+
+    constant ROM : rom_t := (
+        0 => "000",   -- rojo   pequena
+        1 => "001",   -- rojo   grande
+        2 => "010",   -- verde  pequena
+        3 => "011",   -- verde  grande
+        4 => "100",   -- azul   pequena
+        5 => "101",   -- azul   grande
+        6 => "110",   -- color invalido -> rechazo
+        7 => "110"    -- color invalido -> rechazo
+    );
+
+begin
+
+    dato <= ROM(to_integer(unsigned(addr)));
+
+end architecture rtl;
+
+
+
+----------------------------------------------------------------------
+-- CONTADOR SATURADO (0..MAXVAL)
+----------------------------------------------------------------------
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity contador_sat is
+    generic (MAXVAL : integer := 99);
+    port (
+        clk : in  std_logic;
+        rst : in  std_logic;
+        en  : in  std_logic;
+        q   : out unsigned(6 downto 0)
+    );
+end entity contador_sat;
+
+architecture rtl of contador_sat is
+    signal cnt : unsigned(6 downto 0) := (others => '0');
+begin
+
+    process(clk)
+    begin
+        if rising_edge(clk) then
+            if rst = '1' then
+                cnt <= (others => '0');
+            elsif en = '1' and cnt < MAXVAL then
+                cnt <= cnt + 1;
+            end if;
+        end if;
+    end process;
+
+    q <= cnt;
+
+end architecture rtl;
+
+
+
+----------------------------------------------------------------------
+-- PUNTERO DEL HISTORIAL
+--
+-- head : siguiente posicion a escribir (circular, 0..7)
+-- used : cantidad de registros validos (0..8)
+-- view : posicion que se muestra en pantalla
+--
+-- save : al guardar una pieza, view apunta a la pieza recien guardada
+-- nav  : retrocede view hacia piezas mas antiguas
+----------------------------------------------------------------------
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity puntero_historial is
+    port (
+        clk  : in  std_logic;
+        rst  : in  std_logic;
+        save : in  std_logic;
+        nav  : in  std_logic;
+        head : out unsigned(2 downto 0);
+        used : out unsigned(3 downto 0);
+        view : out unsigned(2 downto 0)
+    );
+end entity puntero_historial;
+
+architecture rtl of puntero_historial is
+    signal head_r : unsigned(2 downto 0) := (others => '0');
+    signal used_r : unsigned(3 downto 0) := (others => '0');
+    signal view_r : unsigned(2 downto 0) := (others => '0');
+begin
+
+    process(clk)
+    begin
+        if rising_edge(clk) then
+
+            if rst = '1' then
+                head_r <= (others => '0');
+                used_r <= (others => '0');
+                view_r <= (others => '0');
+
+            else
+
+                -- Navegacion hacia atras
+                if nav = '1' and used_r > 0 then
+                    if view_r = 0 then
+                        if used_r = 8 then
+                            view_r <= to_unsigned(7, 3);
+                        else
+                            view_r <= resize(used_r - 1, 3);
+                        end if;
+                    else
+                        view_r <= view_r - 1;
+                    end if;
+                end if;
+
+                -- Guardado de pieza (tiene prioridad sobre nav)
+                if save = '1' then
+                    head_r <= head_r + 1;          -- 7 + 1 = 0
+                    view_r <= head_r;
+                    if used_r < 8 then
+                        used_r <= used_r + 1;
+                    end if;
+                end if;
+
+            end if;
+        end if;
+    end process;
+
+    head <= head_r;
+    used <= used_r;
+    view <= view_r;
+
+end architecture rtl;
+
+
+
+----------------------------------------------------------------------
+-- RAM DEL HISTORIAL
+--
+-- Escritura y lectura sincronas (doble puerto simple).
+-- Palabra de 10 bits:  color (2) & tamano (1) & numero de pieza (7)
+----------------------------------------------------------------------
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity ram_historial is
+    generic (
+        ADDR_W : integer := 3;
+        DATA_W : integer := 10
+    );
+    port (
+        clk     : in  std_logic;
+        we      : in  std_logic;
+        wr_addr : in  unsigned(ADDR_W-1 downto 0);
+        din     : in  std_logic_vector(DATA_W-1 downto 0);
+        rd_addr : in  unsigned(ADDR_W-1 downto 0);
+        dout    : out std_logic_vector(DATA_W-1 downto 0)
+    );
+end entity ram_historial;
+
+architecture rtl of ram_historial is
+
+    type ram_t is array (0 to 2**ADDR_W - 1)
+        of std_logic_vector(DATA_W-1 downto 0);
+
+    signal mem : ram_t := (others => (others => '0'));
+
+begin
+
+    process(clk)
+    begin
+        if rising_edge(clk) then
+
+            if we = '1' then
+                mem(to_integer(wr_addr)) <= din;
+            end if;
+
+            dout <= mem(to_integer(rd_addr));
+
+        end if;
+    end process;
+
+end architecture rtl;
+
+
+
+----------------------------------------------------------------------
+-- SELECTOR DE DISPLAY
+--
+-- Elige entre la informacion actual y la del historial,
+-- separa decenas / unidades y genera los codigos para las ROM seg7:
+--
+--   0..9 = digitos   10 = E   11 = L   12 = S
+--   13 = r   14 = G   15 = b   16 = apagado
+----------------------------------------------------------------------
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity selector_display is
+    port (
+        modo_hist : in  std_logic;
+        color_act : in  std_logic_vector(1 downto 0);
+        size_act  : in  std_logic_vector(1 downto 0);
+        count_act : in  unsigned(6 downto 0);
+        color_h   : in  std_logic_vector(1 downto 0);
+        size_h    : in  std_logic;
+        count_h   : in  unsigned(6 downto 0);
+        addr_hex3 : out std_logic_vector(4 downto 0);
+        addr_hex2 : out std_logic_vector(4 downto 0);
+        addr_hex1 : out std_logic_vector(4 downto 0);
+        addr_hex0 : out std_logic_vector(4 downto 0)
+    );
+end entity selector_display;
+
+architecture rtl of selector_display is
+
+    constant C_E   : std_logic_vector(4 downto 0) := "01010";  -- 10
+    constant C_L   : std_logic_vector(4 downto 0) := "01011";  -- 11
+    constant C_S   : std_logic_vector(4 downto 0) := "01100";  -- 12
+    constant C_R   : std_logic_vector(4 downto 0) := "01101";  -- 13
+    constant C_G   : std_logic_vector(4 downto 0) := "01110";  -- 14
+    constant C_B   : std_logic_vector(4 downto 0) := "01111";  -- 15
+    constant C_OFF : std_logic_vector(4 downto 0) := "10000";  -- 16
+
+begin
+
+    process(modo_hist, color_act, size_act, count_act,
+            color_h, size_h, count_h)
+
+        variable v_color : std_logic_vector(1 downto 0);
+        variable v_size  : std_logic_vector(1 downto 0);
+        variable v_count : integer range 0 to 127;
+        variable v_tens  : integer range 0 to 15;
+        variable v_units : integer range 0 to 9;
+
+    begin
+
+        -- Informacion actual
+        v_color := color_act;
+        v_size  := size_act;
+        v_count := to_integer(count_act);
+
+        -- Modo historial
+        if modo_hist = '1' then
+            v_color := color_h;
+            v_size  := '0' & size_h;
+            v_count := to_integer(count_h);
+        end if;
+
+        -- Decenas y unidades
+        v_tens  := v_count / 10;
+        v_units := v_count mod 10;
+
+        addr_hex3 <= std_logic_vector(to_unsigned(v_tens, 5));
+        addr_hex2 <= std_logic_vector(to_unsigned(v_units, 5));
+
+        -- Color
+        case v_color is
+            when "00"   => addr_hex1 <= C_R;
+            when "01"   => addr_hex1 <= C_G;
+            when "10"   => addr_hex1 <= C_B;
+            when others => addr_hex1 <= C_E;
+        end case;
+
+        -- Tamano
+        case v_size is
+            when "00"   => addr_hex0 <= C_S;
+            when "01"   => addr_hex0 <= C_L;
+            when others => addr_hex0 <= C_OFF;
+        end case;
+
+    end process;
+
+end architecture rtl;
+
+
+
+----------------------------------------------------------------------
+-- ROM DE 7 SEGMENTOS (activos en bajo, DE0)
+----------------------------------------------------------------------
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity rom_seg7 is
+    port (
+        addr : in  std_logic_vector(4 downto 0);
+        seg  : out std_logic_vector(6 downto 0)
+    );
+end entity rom_seg7;
+
+architecture rtl of rom_seg7 is
+
+    type rom_t is array (0 to 31) of std_logic_vector(6 downto 0);
+
+    constant ROM : rom_t := (
+         0 => "1000000",   -- 0
+         1 => "1111001",   -- 1
+         2 => "0100100",   -- 2
+         3 => "0110000",   -- 3
+         4 => "0011001",   -- 4
+         5 => "0010010",   -- 5
+         6 => "0000010",   -- 6
+         7 => "1111000",   -- 7
+         8 => "0000000",   -- 8
+         9 => "0010000",   -- 9
+        10 => "0000110",   -- E
+        11 => "1000111",   -- L
+        12 => "0010010",   -- S
+        13 => "0101111",   -- r
+        14 => "0100001",   -- G
+        15 => "0000011",   -- b
+        others => "1111111" -- apagado
+    );
+
+begin
+
+    seg <= ROM(to_integer(unsigned(addr)));
+
+end architecture rtl;
+
+
+
+----------------------------------------------------------------------
+-- DECODIFICADOR DE LEDS
+--
+-- LEDG0..5 = ruta (rojo peq/gr, verde peq/gr, azul peq/gr)
+-- LEDG6    = rechazo   LEDG7 = banda   LEDG8 = atasco   LEDG9 = presencia
+----------------------------------------------------------------------
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity decodificador_leds is
+    port (
+        ruta       : in  std_logic_vector(2 downto 0);
+        tam        : in  std_logic_vector(1 downto 0);
+        belt_pulse : in  std_logic;
+        run        : in  std_logic;
+        jam        : in  std_logic;
+        presencia  : in  std_logic;
+        leds       : out std_logic_vector(9 downto 0)
+    );
+end entity decodificador_leds;
+
+architecture rtl of decodificador_leds is
+begin
+
+    gen_rutas : for i in 0 to 5 generate
+        leds(i) <= '1' when unsigned(ruta) = i else '0';
+    end generate;
+
+    leds(6) <= '1' when (unsigned(ruta) = 6 and tam /= "10") else '0';
+
+    leds(7) <= belt_pulse and run and (not jam);
+
+    leds(8) <= jam;
+
+    leds(9) <= presencia;
+
+end architecture rtl;
+
+
+
+----------------------------------------------------------------------
+-- SINCRONIZADOR DE ENTRADA (2 flip-flops)
+-- ACTIVO_BAJO = true invierte la senal (modulos IR que dan 0 al detectar)
+----------------------------------------------------------------------
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity sync_entrada is
+    generic (ACTIVO_BAJO : boolean := false);
+    port (
+        clk     : in  std_logic;
+        entrada : in  std_logic;
+        salida  : out std_logic
+    );
+end entity sync_entrada;
+
+architecture rtl of sync_entrada is
+    signal s1 : std_logic := '0';
+    signal s2 : std_logic := '0';
+begin
+
+    process(clk)
+    begin
+        if rising_edge(clk) then
+            s1 <= entrada;
+            s2 <= s1;
+        end if;
+    end process;
+
+    salida <= (not s2) when ACTIVO_BAJO else s2;
+
+end architecture rtl;
+
+
+
+----------------------------------------------------------------------
+-- BIESTABLE TOGGLE (cambia de estado con cada pulso t)
+----------------------------------------------------------------------
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity biestable_toggle is
+    port (
+        clk : in  std_logic;
+        rst : in  std_logic;
+        t   : in  std_logic;
+        q   : out std_logic
+    );
+end entity biestable_toggle;
+
+architecture rtl of biestable_toggle is
+    signal r : std_logic := '0';
+begin
+
+    process(clk)
+    begin
+        if rising_edge(clk) then
+            if rst = '1' then
+                r <= '0';
+            elsif t = '1' then
+                r <= not r;
+            end if;
+        end if;
+    end process;
+
+    q <= r;
+
+end architecture rtl;
+
+
+
+----------------------------------------------------------------------
+-- SELECTOR DE ENTRADAS: MANUAL (switches) o REAL (sensores)
+-- color_oh: bit0 = rojo, bit1 = verde, bit2 = azul
+----------------------------------------------------------------------
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity selector_entradas is
+    port (
+        modo_real : in  std_logic;
+        sw_pres   : in  std_logic;
+        ir_pres   : in  std_logic;
+        sw_color  : in  std_logic_vector(2 downto 0);
+        tcs_color : in  std_logic_vector(2 downto 0);
+        sw_tam    : in  std_logic;
+        ir_tam    : in  std_logic;
+        presencia : out std_logic;
+        color_oh  : out std_logic_vector(2 downto 0);
+        tam       : out std_logic
+    );
+end entity selector_entradas;
+
+architecture rtl of selector_entradas is
+begin
+
+    presencia <= ir_pres   when modo_real = '1' else sw_pres;
+    color_oh  <= tcs_color when modo_real = '1' else sw_color;
+    tam       <= ir_tam    when modo_real = '1' else sw_tam;
+
+end architecture rtl;
+
+
+
+----------------------------------------------------------------------
+-- MEDIDOR DE COLOR PARA TCS3200
+--
+-- Ciclo continuo: para cada filtro (rojo, verde, azul)
+--   1) espera SETTLE_CYC ciclos a que se asiente el filtro
+--   2) cuenta flancos de OUT durante WINDOW_CYC ciclos
+-- Al terminar los tres, decide el color:
+--   - el canal ganador debe superar a los otros dos por mas de 12,5 %
+--   - y tener al menos MIN_COUNT cuentas
+--   - si no, color_oh = "000" (sin color -> la pieza se rechaza)
+--
+-- S0 = 1, S1 = 0 (escala de frecuencia 20 %).
+-- tcs_s = S3 & S2 & S1 & S0
+-- Filtros (S3 S2): rojo 00, verde 11, azul 10
+-- Con 50 MHz: SETTLE 2 ms, WINDOW 5 ms -> ciclo completo de 21 ms.
+-- AJUSTE: MIN_COUNT y el margen dependen de la luz y del sensor.
+----------------------------------------------------------------------
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity medidor_color is
+    generic (
+        SETTLE_CYC : integer := 100000;
+        WINDOW_CYC : integer := 250000;
+        MIN_COUNT  : integer := 20
+    );
+    port (
+        clk      : in  std_logic;
+        rst      : in  std_logic;
+        tcs_out  : in  std_logic;
+        tcs_s    : out std_logic_vector(3 downto 0);
+        color_oh : out std_logic_vector(2 downto 0);
+        listo    : out std_logic
+    );
+end entity medidor_color;
+
+architecture rtl of medidor_color is
+
+    type est_t is (M_SETTLE, M_COUNT, M_DECIDE);
+
+    signal est   : est_t := M_SETTLE;
+    signal fi    : integer range 0 to 2 := 0;
+    signal tmr   : integer range 0 to 1048575 := 0;
+    signal cnt   : unsigned(15 downto 0) := (others => '0');
+
+    signal c_r   : unsigned(15 downto 0) := (others => '0');
+    signal c_g   : unsigned(15 downto 0) := (others => '0');
+    signal c_b   : unsigned(15 downto 0) := (others => '0');
+
+    signal sy1   : std_logic := '0';
+    signal sy2   : std_logic := '0';
+    signal sy3   : std_logic := '0';
+
+    signal sel   : std_logic_vector(1 downto 0);
+    signal col_r : std_logic_vector(2 downto 0) := "000";
+    signal lst_r : std_logic := '0';
+
+begin
+
+    -- Seleccion del filtro (S3 S2)
+    with fi select
+        sel <= "00" when 0,
+               "11" when 1,
+               "10" when others;
+
+    tcs_s <= sel(1) & sel(0) & "01";
+
+
+    process(clk)
+        variable ir : integer range 0 to 65535;
+        variable ig : integer range 0 to 65535;
+        variable ib : integer range 0 to 65535;
+    begin
+        if rising_edge(clk) then
+
+            -- Sincronizacion de OUT y deteccion de flanco de subida
+            sy1 <= tcs_out;
+            sy2 <= sy1;
+            sy3 <= sy2;
+
+            lst_r <= '0';
+
+            if rst = '1' then
+
+                est   <= M_SETTLE;
+                fi    <= 0;
+                tmr   <= 0;
+                cnt   <= (others => '0');
+                c_r   <= (others => '0');
+                c_g   <= (others => '0');
+                c_b   <= (others => '0');
+                col_r <= "000";
+
+            else
+
+                case est is
+
+                    when M_SETTLE =>
+                        if tmr >= SETTLE_CYC - 1 then
+                            tmr <= 0;
+                            cnt <= (others => '0');
+                            est <= M_COUNT;
+                        else
+                            tmr <= tmr + 1;
+                        end if;
+
+                    when M_COUNT =>
+                        if sy2 = '1' and sy3 = '0' and cnt /= 65535 then
+                            cnt <= cnt + 1;
+                        end if;
+
+                        if tmr >= WINDOW_CYC - 1 then
+                            tmr <= 0;
+
+                            case fi is
+                                when 0      => c_r <= cnt;
+                                when 1      => c_g <= cnt;
+                                when others => c_b <= cnt;
+                            end case;
+
+                            if fi = 2 then
+                                fi  <= 0;
+                                est <= M_DECIDE;
+                            else
+                                fi  <= fi + 1;
+                                est <= M_SETTLE;
+                            end if;
+                        else
+                            tmr <= tmr + 1;
+                        end if;
+
+                    when M_DECIDE =>
+                        ir := to_integer(c_r);
+                        ig := to_integer(c_g);
+                        ib := to_integer(c_b);
+
+                        if ir >= MIN_COUNT and
+                           ir > ig + ig / 8 and ir > ib + ib / 8 then
+                            col_r <= "001";                 -- rojo
+                        elsif ig >= MIN_COUNT and
+                              ig > ir + ir / 8 and ig > ib + ib / 8 then
+                            col_r <= "010";                 -- verde
+                        elsif ib >= MIN_COUNT and
+                              ib > ir + ir / 8 and ib > ig + ig / 8 then
+                            col_r <= "100";                 -- azul
+                        else
+                            col_r <= "000";                 -- sin color
+                        end if;
+
+                        lst_r <= '1';
+                        est   <= M_SETTLE;
+
+                end case;
+
+            end if;
+        end if;
+    end process;
+
+    color_oh <= col_r;
+    listo    <= lst_r;
+
+end architecture rtl;
+
+
+
+----------------------------------------------------------------------
+-- ROM DE SERVOS
+--
+-- Entrada: ruta (0..6).  Salida: posicion de cada servo.
+--   pos1 = servo 1 (giro hacia la columna del color)
+--          00 = rojo   01 = verde   10 = azul
+--   pos2 = servo 2 (inclinacion hacia la fila)
+--          00 = pequena   01 = grande   10 = rechazo
+----------------------------------------------------------------------
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity rom_servos is
+    port (
+        ruta : in  std_logic_vector(2 downto 0);
+        pos1 : out std_logic_vector(1 downto 0);
+        pos2 : out std_logic_vector(1 downto 0)
+    );
+end entity rom_servos;
+
+architecture rtl of rom_servos is
+
+    type rom_t is array (0 to 7) of std_logic_vector(3 downto 0);
+
+    -- pos1 & pos2
+    constant ROM : rom_t := (
+        0 => "0000",   -- rojo   pequena
+        1 => "0001",   -- rojo   grande
+        2 => "0100",   -- verde  pequena
+        3 => "0101",   -- verde  grande
+        4 => "1000",   -- azul   pequena
+        5 => "1001",   -- azul   grande
+        6 => "0110",   -- rechazo (centro, fila de rechazo)
+        7 => "0110"
+    );
+
+    signal dato : std_logic_vector(3 downto 0);
+
+begin
+
+    dato <= ROM(to_integer(unsigned(ruta)));
+
+    pos1 <= dato(3 downto 2);
+    pos2 <= dato(1 downto 0);
+
+end architecture rtl;
+
+
+
+----------------------------------------------------------------------
+-- PWM PARA SERVO (periodo 20 ms)
+--   pos 00 = 1,0 ms    pos 01 = 1,5 ms    pos 10 = 2,0 ms
+--   (pos 11 se trata como centro)
+-- Ajusta POSx_CYC si tu servo necesita otro rango.
+----------------------------------------------------------------------
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity pwm_servo is
+    generic (
+        PERIODO_CYC : integer := 1000000;
+        POS0_CYC    : integer := 50000;
+        POS1_CYC    : integer := 75000;
+        POS2_CYC    : integer := 100000
+    );
+    port (
+        clk : in  std_logic;
+        rst : in  std_logic;
+        pos : in  std_logic_vector(1 downto 0);
+        pwm : out std_logic
+    );
+end entity pwm_servo;
+
+architecture rtl of pwm_servo is
+
+    signal cnt   : integer range 0 to PERIODO_CYC - 1 := 0;
+    signal ancho : integer range 0 to PERIODO_CYC;
+
+begin
+
+    ancho <= POS0_CYC when pos = "00" else
+             POS2_CYC when pos = "10" else
+             POS1_CYC;
+
+    process(clk)
+    begin
+        if rising_edge(clk) then
+
+            if rst = '1' then
+                cnt <= 0;
+                pwm <= '0';
+            else
+
+                if cnt = PERIODO_CYC - 1 then
+                    cnt <= 0;
+                else
+                    cnt <= cnt + 1;
+                end if;
+
+                if cnt < ancho then
+                    pwm <= '1';
+                else
+                    pwm <= '0';
+                end if;
+
+            end if;
+        end if;
+    end process;
+
+end architecture rtl;
+
+
+
+----------------------------------------------------------------------
+-- CONTROL DEL MOTOR DE LA BANDA (puente H tipo L298N)
+--
+-- Banda encendida (run = 1 y jam = 0): IN1 = 1, IN2 = 0 y ENA con PWM
+--   speed 00 = 25 %   01 = 50 %   10 = 75 %   11 = 100 %
+-- Banda detenida o atasco: ENA = 0, IN1 = 0, IN2 = 0
+-- PWM de 5 kHz (10000 ciclos). Si el motor se cala al 25 %, sube ese valor.
+----------------------------------------------------------------------
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity control_motor is
+    generic (PERIODO_CYC : integer := 10000);
+    port (
+        clk   : in  std_logic;
+        rst   : in  std_logic;
+        run   : in  std_logic;
+        jam   : in  std_logic;
+        speed : in  std_logic_vector(1 downto 0);
+        ena   : out std_logic;
+        in1   : out std_logic;
+        in2   : out std_logic
+    );
+end entity control_motor;
+
+architecture rtl of control_motor is
+
+    signal cnt  : integer range 0 to PERIODO_CYC - 1 := 0;
+    signal duty : integer range 0 to PERIODO_CYC;
+
+begin
+
+    with speed select
+        duty <= PERIODO_CYC / 4     when "00",
+                PERIODO_CYC / 2     when "01",
+                3 * PERIODO_CYC / 4 when "10",
+                PERIODO_CYC         when others;
+
+    process(clk)
+    begin
+        if rising_edge(clk) then
+
+            if rst = '1' then
+                cnt <= 0;
+                ena <= '0';
+                in1 <= '0';
+                in2 <= '0';
+            else
+
+                if cnt = PERIODO_CYC - 1 then
+                    cnt <= 0;
+                else
+                    cnt <= cnt + 1;
+                end if;
+
+                if run = '1' and jam = '0' then
+                    in1 <= '1';
+                    in2 <= '0';
+                    if cnt < duty then
+                        ena <= '1';
+                    else
+                        ena <= '0';
+                    end if;
+                else
+                    in1 <= '0';
+                    in2 <= '0';
+                    ena <= '0';
+                end if;
+
+            end if;
+        end if;
+    end process;
+
+end architecture rtl;
+
+
+
+----------------------------------------------------------------------
+-- CONTROL DEL PASO A PASO (28BYJ-48 con ULN2003, medio paso)
+--
+-- go = pulso de 1 ciclo: avanza PASOS medios pasos (una pieza).
+-- en = 0 cancela el movimiento. Al terminar suelta las bobinas.
+-- 4096 medios pasos = 1 vuelta.  683 = 1/6 de vuelta (6 huecos).
+-- PASO_CYC = 100000 -> 2 ms por paso (500 pasos/s).
+-- bobinas(0) = IN1 ... bobinas(3) = IN4
+----------------------------------------------------------------------
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity control_paso is
+    generic (
+        PASOS    : integer := 683;
+        PASO_CYC : integer := 100000
+    );
+    port (
+        clk     : in  std_logic;
+        rst     : in  std_logic;
+        en      : in  std_logic;
+        go      : in  std_logic;
+        busy    : out std_logic;
+        bobinas : out std_logic_vector(3 downto 0)
+    );
+end entity control_paso;
+
+architecture rtl of control_paso is
+
+    type seq_t is array (0 to 7) of std_logic_vector(3 downto 0);
+
+    constant SEQ : seq_t := (
+        "0001",   -- IN1
+        "0011",   -- IN1 + IN2
+        "0010",   -- IN2
+        "0110",   -- IN2 + IN3
+        "0100",   -- IN3
+        "1100",   -- IN3 + IN4
+        "1000",   -- IN4
+        "1001"    -- IN4 + IN1
+    );
+
+    signal fase    : integer range 0 to 7 := 0;
+    signal restan  : integer range 0 to PASOS := 0;
+    signal tmr     : integer range 0 to PASO_CYC - 1 := 0;
+    signal ocupado : std_logic := '0';
+
+begin
+
+    process(clk)
+    begin
+        if rising_edge(clk) then
+
+            if rst = '1' then
+                fase    <= 0;
+                restan  <= 0;
+                tmr     <= 0;
+                ocupado <= '0';
+
+            elsif ocupado = '0' then
+
+                tmr <= 0;
+                if go = '1' and en = '1' then
+                    ocupado <= '1';
+                    restan  <= PASOS;
+                end if;
+
+            else
+
+                if en = '0' then
+                    ocupado <= '0';
+                    restan  <= 0;
+
+                elsif tmr = PASO_CYC - 1 then
+                    tmr <= 0;
+
+                    if fase = 7 then
+                        fase <= 0;
+                    else
+                        fase <= fase + 1;
+                    end if;
+
+                    if restan <= 1 then
+                        ocupado <= '0';
+                        restan  <= 0;
+                    else
+                        restan <= restan - 1;
+                    end if;
+
+                else
+                    tmr <= tmr + 1;
+                end if;
+
+            end if;
+        end if;
+    end process;
+
+    bobinas <= SEQ(fase) when ocupado = '1' else "0000";
+    busy    <= ocupado;
+
+end architecture rtl;
+
+
+
+----------------------------------------------------------------------
+-- TOP-LEVEL
+----------------------------------------------------------------------
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+use work.componentes_pkg.all;
+
+entity clasificador_piezas is
+    port (
+        CLOCK_50 : in  std_logic;
+        SW       : in  std_logic_vector(9 downto 0);
+        BUTTON   : in  std_logic_vector(2 downto 0);
+        LEDG     : out std_logic_vector(9 downto 0);
+        HEX0_D   : out std_logic_vector(6 downto 0);
+        HEX1_D   : out std_logic_vector(6 downto 0);
+        HEX2_D   : out std_logic_vector(6 downto 0);
+        HEX3_D   : out std_logic_vector(6 downto 0);
+        HEX0_DP  : out std_logic;
+
+        -- GPIO1 (J5): sensores
+        IR_PRES  : in  std_logic;
+        IR_TAM   : in  std_logic;
+        TCS_OUT  : in  std_logic;
+        TCS_S    : out std_logic_vector(3 downto 0);   -- S3 S2 S1 S0
+
+        -- GPIO0 (J4): actuadores
+        SERVO1   : out std_logic;
+        SERVO2   : out std_logic;
+        MOT_ENA  : out std_logic;
+        MOT_IN1  : out std_logic;
+        MOT_IN2  : out std_logic;
+        STEP     : out std_logic_vector(3 downto 0)    -- IN1 a IN4
+    );
+end entity clasificador_piezas;
+
+
+architecture rtl of clasificador_piezas is
+
+    -- Reset y tick
+    signal rst         : std_logic;
+    signal tick        : std_logic;
+    signal tick_on     : std_logic;
+
+0..    signal run         : std_logic;
+    signal jam         : std_logic;
+    signal presencia   : std_logic;      -- presencia efectiva (manual o real)
+    signal btn_nav     : std_logic;
+    signal btn_modo    : std_logic;
+    signal fl_presenc  : std_logic;
+    signal fl_nav      : std_logic;
+    signal fl_modo     : std_logic;
+    signal fl_run      : std_logic;
+    signal belt_pulse  : std_logic;
+
+    -- Modo manual / real
+    signal modo_real   : std_logic;
+    signal ir_pres_s   : std_logic;
+    signal ir_tam_s    : std_logic;
+    signal tcs_color   : std_logic_vector(2 downto 0);
+    signal color_listo : std_logic;
+
+    -- Sensores
+    signal sw_color    : std_logic_vector(2 downto 0);
+    signal color_oh    : std_logic_vector(2 downto 0);
+    signal tam_ef      : std_logic;
+    signal color_code  : std_logic_vector(1 downto 0);
+    signal size_code   : std_logic;
+
+    -- Captura
+    signal cap_d       : std_logic_vector(2 downto 0);
+    signal cap_q       : std_logic_vector(2 downto 0);
+    signal cap_color   : std_logic_vector(1 downto 0);
+    signal cap_size    : std_logic;
+    signal valido_l    : std_logic;
+
+    -- Control FSM
+    signal cap_en      : std_logic;
+    signal upd_ultima  : std_logic;
+    signal inc_ok      : std_logic;
+    signal inc_rej     : std_logic;
+    signal we_ram      : std_logic;
+    signal save_ptr    : std_logic;
+
+    -- ROM de rutas
+    signal ruta        : std_logic_vector(2 downto 0);
+
+    -- Ultima pieza: color(2) & tamano(2) & ruta(3)
+    -- Reset: color 3 (error), tamano 2 (no definido), ruta 6 (rechazo)
+    constant ULT_RST   : std_logic_vector(15 downto 0) := "000000000" & "1110110";
+    signal ult_d       : std_logic_vector(6 downto 0);
+    signal ult_q       : std_logic_vector(6 downto 0);
+
+    -- Contadores
+    signal piece_count  : unsigned(6 downto 0);
+    signal reject_count : unsigned(6 downto 0);
+
+    -- Historial
+    signal head        : unsigned(2 downto 0);
+    signal used        : unsigned(3 downto 0);
+    signal view        : unsigned(2 downto 0);
+    signal ram_din     : std_logic_vector(9 downto 0);
+    signal ram_dout    : std_logic_vector(9 downto 0);
+    signal hist_hay    : std_logic;
+    signal modo_hist   : std_logic;
+
+    -- Displays
+    signal addr_hex3   : std_logic_vector(4 downto 0);
+    signal addr_hex2   : std_logic_vector(4 downto 0);
+    signal addr_hex1   : std_logic_vector(4 downto 0);
+    signal addr_hex0   : std_logic_vector(4 downto 0);
+
+    -- Actuadores
+    signal pos_pan     : std_logic_vector(1 downto 0);
+    signal pos_tilt    : std_logic_vector(1 downto 0);
+    signal alim_go     : std_logic;
+    signal alim_en     : std_logic;
+    signal alim_busy   : std_logic;
+
+begin
+
+    ------------------------------------------------------------------
+    -- SENALES DE ENTRADA
+    ------------------------------------------------------------------
+    rst      <= not BUTTON(2);         -- reset activo en bajo
+    run      <= SW(0);
+    jam      <= SW(8);
+    btn_nav  <= not BUTTON(1);         -- boton activo en bajo
+    btn_modo <= not BUTTON(0);         -- boton activo en bajo
+    sw_color <= SW(6 downto 4);
+    tick_on  <= '1';
+
+
+    ------------------------------------------------------------------
+    -- TICK BASE (8 Hz)
+    ------------------------------------------------------------------
+    U_DIV : divisor_reloj
+        generic map (TICK_MAX => 6249999)
+        port map (
+            clk  => CLOCK_50,
+            tick => tick
+        );
+
+
+    ------------------------------------------------------------------
+    -- MODO MANUAL / REAL  (BUTTON0 alterna, HEX0 punto = modo real)
+    ------------------------------------------------------------------
+    U_FL_MODO : detector_flanco
+        port map (
+            clk    => CLOCK_50,
+            rst    => rst,
+            tick   => tick_on,         -- muestreo en cada ciclo de reloj
+            senal  => btn_modo,
+            flanco => fl_modo
+        );
+
+    U_MODO : biestable_toggle
+        port map (
+            clk => CLOCK_50,
+            rst => rst,
+            t   => fl_modo,
+            q   => modo_real
+        );
+
+    HEX0_DP <= not modo_real;          -- punto encendido en modo real
+
+
+    ------------------------------------------------------------------
+    -- BANDA (indicador LED)
+    ------------------------------------------------------------------
+    U_BANDA : control_banda
+        port map (
+            clk        => CLOCK_50,
+            rst        => rst,
+            tick       => tick,
+            run        => run,
+            jam        => jam,
+            speed      => SW(2 downto 1),
+            belt_pulse => belt_pulse
+        );
+
+
+    ------------------------------------------------------------------
+    -- SENSORES REALES
+    ------------------------------------------------------------------
+    U_SYNC_PRES : sync_entrada
+        generic map (ACTIVO_BAJO => true)      -- IR da 0 al detectar
+        port map (
+            clk     => CLOCK_50,
+            entrada => IR_PRES,
+            salida  => ir_pres_s
+        );
+
+    U_SYNC_TAM : sync_entrada
+        generic map (ACTIVO_BAJO => true)      -- IR da 0 al bloquearse
+        port map (
+            clk     => CLOCK_50,
+            entrada => IR_TAM,
+            salida  => ir_tam_s
+        );
+
+    U_COLOR : medidor_color
+        generic map (
+            SETTLE_CYC => 100000,              -- 2 ms
+            WINDOW_CYC => 250000,              -- 5 ms
+            MIN_COUNT  => 20
+        )
+        port map (
+            clk      => CLOCK_50,
+            rst      => rst,
+            tcs_out  => TCS_OUT,
+            tcs_s    => TCS_S,
+            color_oh => tcs_color,
+            listo    => color_listo
+        );
+
+
+    ------------------------------------------------------------------
+    -- SELECCION MANUAL / REAL Y DECODIFICACION
+    ------------------------------------------------------------------
+    U_SEL_IN : selector_entradas
+        port map (
+            modo_real => modo_real,
+            sw_pres   => SW(3),
+            ir_pres   => ir_pres_s,
+            sw_color  => sw_color,
+            tcs_color => tcs_color,
+            sw_tam    => SW(7),
+            ir_tam    => ir_tam_s,
+            presencia => presencia,
+            color_oh  => color_oh,
+            tam       => tam_ef
+        );
+
+    U_SENSORES : decodificador_sensores
+        port map (
+            sw_color   => color_oh,
+            sw_tam     => tam_ef,
+            color_code => color_code,
+            size_code  => size_code
+        );
+
+
+    ------------------------------------------------------------------
+    -- DETECTORES DE FLANCO (muestreo a 8 Hz)
+    ------------------------------------------------------------------
+    U_FL_PRES : detector_flanco
+        port map (
+            clk    => CLOCK_50,
+            rst    => rst,
+            tick   => tick,
+            senal  => presencia,
+            flanco => fl_presenc
+        );
+
+    U_FL_NAV : detector_flanco
+        port map (
+            clk    => CLOCK_50,
+            rst    => rst,
+            tick   => tick,
+            senal  => btn_nav,
+            flanco => fl_nav
+        );
+
+    U_FL_RUN : detector_flanco
+        port map (
+            clk    => CLOCK_50,
+            rst    => rst,
+            tick   => tick,
+            senal  => run,
+            flanco => fl_run
+        );
+
+
+    ------------------------------------------------------------------
+    -- CAPTURA
+    ------------------------------------------------------------------
+    cap_d <= color_code & size_code;
+
+    U_CAPTURA : registro
+        generic map (WIDTH => 3)
+        port map (
+            clk => CLOCK_50,
+            rst => rst,
+            en  => cap_en,
+            d   => cap_d,
+            q   => cap_q
+        );
+
+    cap_color <= cap_q(2 downto 1);
+    cap_size  <= cap_q(0);
+    valido_l  <= '0' when cap_color = "11" else '1';
+
+
+    ------------------------------------------------------------------
+    -- MAQUINA DE ESTADOS
+    ------------------------------------------------------------------
+    U_FSM : fsm_control
+        port map (
+            clk         => CLOCK_50,
+            rst         => rst,
+            run         => run,
+            jam         => jam,
+            presencia   => fl_presenc,
+            modo_real   => modo_real,
+            color_listo => color_listo,
+            color_valid => valido_l,
+            cap_en      => cap_en,
+            upd_ultima  => upd_ultima,
+            inc_ok      => inc_ok,
+            inc_rej     => inc_rej,
+            we_ram      => we_ram,
+            save_ptr    => save_ptr
+        );
+
+
+    ------------------------------------------------------------------
+    -- ROM DE RUTAS
+    ------------------------------------------------------------------
+    U_ROM_RUTAS : rom_rutas
+        port map (
+            addr => cap_q,          -- color & tamano
+            dato => ruta
+        );
+
+
+    ------------------------------------------------------------------
+    -- ULTIMA PIEZA CLASIFICADA
+    ------------------------------------------------------------------
+    ult_d <= cap_color & ('0' & cap_size) & ruta;
+
+    U_ULTIMA : registro
+        generic map (WIDTH => 7, RST_VAL => ULT_RST)
+        port map (
+            clk => CLOCK_50,
+            rst => rst,
+            en  => upd_ultima,
+            d   => ult_d,
+            q   => ult_q
+        );
+
+
+    ------------------------------------------------------------------
+    -- CONTADORES
+    ------------------------------------------------------------------
+    U_CNT_OK : contador_sat
+        generic map (MAXVAL => 99)
+        port map (
+            clk => CLOCK_50,
+            rst => rst,
+            en  => inc_ok,
+            q   => piece_count
+        );
+
+    U_CNT_REJ : contador_sat
+        generic map (MAXVAL => 99)
+        port map (
+            clk => CLOCK_50,
+            rst => rst,
+            en  => inc_rej,
+            q   => reject_count
+        );
+
+
+    ------------------------------------------------------------------
+    -- HISTORIAL: PUNTEROS + RAM
+    ------------------------------------------------------------------
+    U_PUNTERO : puntero_historial
+        port map (
+            clk  => CLOCK_50,
+            rst  => rst,
+            save => save_ptr,
+            nav  => fl_nav,
+            head => head,
+            used => used,
+            view => view
+        );
+
+    ram_din <= cap_color & cap_size & std_logic_vector(piece_count);
+
+    U_RAM : ram_historial
+        generic map (ADDR_W => 3, DATA_W => 10)
+        port map (
+            clk     => CLOCK_50,
+            we      => we_ram,
+            wr_addr => head,
+            din     => ram_din,
+            rd_addr => view,
+            dout    => ram_dout
+        );
+
+    hist_hay  <= '1' when used /= 0 else '0';
+    modo_hist <= SW(9) and hist_hay;
+
+
+    ------------------------------------------------------------------
+    -- DISPLAYS
+    ------------------------------------------------------------------
+    U_SELECTOR : selector_display
+        port map (
+            modo_hist => modo_hist,
+            color_act => ult_q(6 downto 5),
+            size_act  => ult_q(4 downto 3),
+            count_act => piece_count,
+            color_h   => ram_dout(9 downto 8),
+            size_h    => ram_dout(7),
+            count_h   => unsigned(ram_dout(6 downto 0)),
+            addr_hex3 => addr_hex3,
+            addr_hex2 => addr_hex2,
+            addr_hex1 => addr_hex1,
+            addr_hex0 => addr_hex0
+        );
+
+    U_SEG3 : rom_seg7 port map (addr => addr_hex3, seg => HEX3_D);
+    U_SEG2 : rom_seg7 port map (addr => addr_hex2, seg => HEX2_D);
+    U_SEG1 : rom_seg7 port map (addr => addr_hex1, seg => HEX1_D);
+    U_SEG0 : rom_seg7 port map (addr => addr_hex0, seg => HEX0_D);
+
+
+    ------------------------------------------------------------------
+    -- LEDS
+    ------------------------------------------------------------------
+    U_LEDS : decodificador_leds
+        port map (
+            ruta       => ult_q(2 downto 0),
+            tam        => ult_q(4 downto 3),
+            belt_pulse => belt_pulse,
+            run        => run,
+            jam        => jam,
+            presencia  => presencia,
+            leds       => LEDG
+        );
+
+
+    ------------------------------------------------------------------
+    -- ACTUADORES: SERVOS (desvio por la ultima ruta)
+    ------------------------------------------------------------------
+    U_ROM_SERVOS : rom_servos
+        port map (
+            ruta => ult_q(2 downto 0),
+            pos1 => pos_pan,
+            pos2 => pos_tilt
+        );
+
+    U_SERVO1 : pwm_servo
+        port map (
+            clk => CLOCK_50,
+            rst => rst,
+            pos => pos_pan,
+            pwm => SERVO1
+        );
+
+    U_SERVO2 : pwm_servo
+        port map (
+            clk => CLOCK_50,
+            rst => rst,
+            pos => pos_tilt,
+            pwm => SERVO2
+        );
+
+
+    ------------------------------------------------------------------
+    -- ACTUADORES: MOTOR DC DE LA BANDA
+    ------------------------------------------------------------------
+    U_MOTOR : control_motor
+        generic map (PERIODO_CYC => 10000)
+        port map (
+            clk   => CLOCK_50,
+            rst   => rst,
+            run   => run,
+            jam   => jam,
+            speed => SW(2 downto 1),
+            ena   => MOT_ENA,
+            in1   => MOT_IN1,
+            in2   => MOT_IN2
+        );
+
+
+    ------------------------------------------------------------------
+    -- ACTUADORES: ALIMENTADOR PASO A PASO
+    -- Suelta una pieza al arrancar la banda y despues de clasificar
+    -- cada pieza. Solo funciona en modo real y con la banda en marcha.
+    ------------------------------------------------------------------
+    alim_go <= (save_ptr or fl_run) and modo_real;
+    alim_en <= modo_real and run and (not jam);
+
+    U_ALIMENTADOR : control_paso
+        generic map (PASOS => 683, PASO_CYC => 100000)
+        port map (
+            clk     => CLOCK_50,
+            rst     => rst,
+            en      => alim_en,
+            go      => alim_go,
+            busy    => alim_busy,
+            bobinas => STEP
+        );
+
+end architecture rtl;
